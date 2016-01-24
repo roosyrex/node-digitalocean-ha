@@ -54,15 +54,15 @@ function makeRequest (method, url, headers, data, code) {
   // Set timeout for request.
 
   setTimeout(function () {
+    timeout = true;
     return deferred.reject(500);
   }, REQUEST_TIMEOUT_MS);
 
   request[method](options, function (err, res, body) {
 
-    // If the promise isn't pending, we timed the
-    // request out so return immediately.
+    // If timed out, return immediately.
 
-    if (deferred.promise.state !== 'pending')
+    if (timeout)
       return;
 
     // Resolve if code matches, else reject.
@@ -153,7 +153,7 @@ function doHeartbeat () {
 
   // Make heartbeat request.
 
-  var promise = makeRequest('get', 'http://' + config.peerAddress)
+  var promise = makeRequest('get', 'http://' + config.peerAddress + ':' + config.bindPort)
   .then(heartbeatSuccess, heartbeatFailure);
 
 }

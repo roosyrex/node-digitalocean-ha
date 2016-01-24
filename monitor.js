@@ -128,7 +128,7 @@ function acquireIP () {
 
 }
 
-function hearbeatSuccess () {
+function heartbeatSuccess () {
 
   lastHeartbeat = moment();
 

@@ -153,7 +153,7 @@ function doHeartbeat () {
 
   // Make heartbeat request.
 
-  var promise = makeRequest('get', 'http://' + config.peerAddress, null, null, 307)
+  var promise = makeRequest('get', 'http://' + config.peerAddress)
   .then(heartbeatSuccess, heartbeatFailure);
 
 }
@@ -170,10 +170,10 @@ try {
 // Start the heartbeat server.
 
 server = http.createServer(function (req, res) {
-  return res.end();
+  return res.end('OK');
 });
 
-server.listen(config.port);
+server.listen(config.bindPort, config.bindAddress);
 
 // Start heartbeat requests.
 

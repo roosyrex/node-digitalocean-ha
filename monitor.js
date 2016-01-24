@@ -91,7 +91,7 @@ function acquireIP () {
 
   // Check if the floating IP is already assigned to us.
 
-  makeRequest(FIP_ACTIVE_URL)
+  makeRequest('get', FIP_ACTIVE_URL)
   .then(function (body) {
 
     if (body === 'true') {

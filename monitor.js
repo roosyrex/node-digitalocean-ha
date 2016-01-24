@@ -9,7 +9,7 @@ var moment  = require('moment');
 
 var REQUEST_TIMEOUT_MS     = 15000;
 var HEARTBEAT_INTERVAL_MS  = 20000;
-var ACQUIRE_AFTER_MS       = 180000;
+var ACQUIRE_AFTER_MS       = 60000;
 var ACQUIRE_DELAY_MS       = 60000;
 
 var FIP_ACTIVE_URL  = 'http://169.254.169.254/metadata/v1/floating_ip/ipv4/active';
@@ -34,7 +34,7 @@ function panic () {
   log('PANIC!');
 }
 
-function makeRequest (method, url, headers, data, code) {
+function makeRequest (method, url, headers, body, code) {
 
   code = code || 200;
 
@@ -48,8 +48,8 @@ function makeRequest (method, url, headers, data, code) {
 
   if (headers)
     options.headers = headers;
-  if (data)
-    options.data = data;
+  if (body)
+    options.body = body;
 
   // Set timeout for request.
 
@@ -103,10 +103,13 @@ function acquireIP () {
     // Attempt to acquire the floating IP.
 
     var url     = FIP_ACQUIRE_URL.replace('$floatingIP', config.floatingIP);
-    var headers = { 'Authorization' : 'Bearer ' + config.apiToken };
     var data    = { type: 'assign', droplet_id: config.dropletId };
+    var headers = {
+      'Authorization' : 'Bearer ' + config.apiToken,
+      'Content-Type'  : 'application/json'
+    };
 
-    makeRequest('post', url, headers, data)
+    makeRequest('post', url, headers, JSON.stringify(data))
     .then(function () {
 
       lastHeartbeat = moment();
@@ -118,9 +121,10 @@ function acquireIP () {
       acquireFailures++;
       log('Failed to acquire IP: ' + err);
 
-      if (acquireFailures >= 3)
+      if (acquireFailures >= 3) {
         panic();
         return process.exit();
+      }
 
     });
   

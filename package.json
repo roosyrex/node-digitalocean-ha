@@ -1,0 +1,12 @@
+{
+  "name": "digitalocean-ha",
+  "version": "0.0.1",
+  "description": "High-availability (HA) monitor for DigitalOcean droplets using Floating IPs",
+  "author": "Daniel Shipp",
+  "license": "MIT",
+  "dependencies": {
+    "moment": "^2.11.1",
+    "q": "^1.4.1",
+    "request": "^2.67.0"
+  }
+}

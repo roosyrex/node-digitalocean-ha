@@ -34,12 +34,17 @@ function panic () {
   log('PANIC!');
 }
 
-function makeRequest (method, url, headers, data) {
+function makeRequest (method, url, headers, data, code) {
+
+  code = code || 200;
 
   var deferred = Q.defer();
   var timeout  = false;
 
-  var options = { url: url };
+  var options = {
+    url: url,
+    followRedirect: false
+  };
 
   if (headers)
     options.headers = headers;
@@ -60,9 +65,9 @@ function makeRequest (method, url, headers, data) {
     if (deferred.promise.state !== 'pending')
       return;
 
-    // Resolve if 200 OK, else reject.
+    // Resolve if code matches, else reject.
 
-    if (!err && res.statusCode === 200)
+    if (!err && res.statusCode === code)
       return deferred.resolve(body);
     else
       return deferred.reject(err || res.statusCode);
@@ -148,7 +153,7 @@ function doHeartbeat () {
 
   // Make heartbeat request.
 
-  var promise = makeRequest('get', 'http://' + config.peerAddress)
+  var promise = makeRequest('get', 'http://' + config.peerAddress, null, null, 307)
   .then(heartbeatSuccess, heartbeatFailure);
 
 }

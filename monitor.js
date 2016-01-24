@@ -109,7 +109,7 @@ function acquireIP () {
       'Content-Type'  : 'application/json'
     };
 
-    makeRequest('post', url, headers, JSON.stringify(data))
+    makeRequest('post', url, headers, JSON.stringify(data), 201)
     .then(function () {
 
       lastHeartbeat = moment();

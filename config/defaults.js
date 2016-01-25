@@ -20,7 +20,7 @@ module.exports = {
   // Initial heartbeat delay (milliseconds).
   heartbeatInitialDelayMs : 30000,
   // Peer downtime before floating IP acquisition (milliseconds).
-  acquireIPAfterMs        : 60000,
+  acquireIPAfterMs        : 120000,
   // Interval between floating IP acquisition attempts (milliseconds).
   acquireIPDelayMs        : 60000,
 

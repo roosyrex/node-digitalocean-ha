@@ -27,7 +27,7 @@ function log (message) {
 }
 
 function logEmphasis (message) {
-  console.log(moment().format('[[]HH:mm:ss[] ]').white, message.magenta);
+  console.log(moment().format('[[]HH:mm:ss[] ]').white, message.bold.cyan);
 }
 
 function logWarning (message) {
@@ -79,7 +79,7 @@ function makeRequest (method, url, headers, body, code) {
     if (!err && res.statusCode === code)
       return deferred.resolve(body);
     else
-      return deferred.reject(err || res.statusCode);
+      return deferred.reject(err || 'Invalid status code: ' + res.statusCode);
 
   });
 
@@ -107,7 +107,7 @@ function acquireIP () {
     if (body === 'true') {
       lastHeartbeat = moment();
       acquireFailures = 0;
-      return log('Floating IP is already assigned to us, no action required');
+      return logEmphasis('Floating IP is already assigned to us, no action required');
     }
 
     // Attempt to acquire the floating IP.
@@ -157,7 +157,10 @@ function heartbeatFailure (reason) {
 
   logWarning('No heartbeat response received from peer (' +
       config.peerIPAddress + ')');
-  logWarning(reason);
+  if (reason instanceof Error)
+    logError(reason);
+  else
+    logWarning(reason);
 
   if (moment().diff(lastHeartbeat) >= config.acquireIPAfterMs)
     return acquireIP();
@@ -275,8 +278,8 @@ function doHeartbeat () {
 
     var delaySeconds = config.heartbeatInitialDelayMs / 1000;
 
-    log('Heartbeat server started OK');
-    log('First heartbeat will be sent in ' + delaySeconds + 's...');
+    logEmphasis('Heartbeat server started OK');
+    logEmphasis('First heartbeat will be sent in ' + delaySeconds + 's...');
 
     setTimeout(doHeartbeat, config.heartbeatInitialDelayMs);
 

@@ -2,8 +2,10 @@
 
 var http    = require('http');
 var Q       = require('q');
+var _       = require('lodash');
 var request = require('request');
 var moment  = require('moment');
+var config  = require('./config/defaults');
 
 // Constants.
 
@@ -12,8 +14,6 @@ var FIP_ACTIVE_URL  = 'http://169.254.169.254/metadata/v1/floating_ip/ipv4/activ
 var FIP_ACQUIRE_URL = 'https://api.digitalocean.com/v2/floating_ips/$floatingIPAddress/actions';
 
 // Variables.
-
-var config = null;
 
 var lastHeartbeat   = null;
 var lastAcquisition = null;
@@ -54,7 +54,7 @@ function makeRequest (method, url, headers, body, code) {
 
   setTimeout(function () {
     timeout = true;
-    return deferred.reject(500);
+    return deferred.reject('request timed out');
   }, config.httpRequestTimeoutMs);
 
   request[method](options, function (err, res, body) {
@@ -178,7 +178,8 @@ function doHeartbeat () {
   // Load configuration and run setup activities.
 
   Q().then(function () {
-    config = require('./config/config.js');
+    locals = require('./config/config.js');
+    _.assign(config, locals);
   })
   .catch(function (err) {
     logError(err);

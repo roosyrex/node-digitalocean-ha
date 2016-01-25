@@ -5,6 +5,7 @@
   "author": "Daniel Shipp",
   "license": "MIT",
   "dependencies": {
+    "lodash": "^4.0.0",
     "moment": "^2.11.1",
     "q": "^1.4.1",
     "request": "^2.67.0"

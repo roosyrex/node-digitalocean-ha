@@ -5,6 +5,7 @@ var Q       = require('q');
 var _       = require('lodash');
 var request = require('request');
 var moment  = require('moment');
+var colors  = require('colors');
 var config  = require('./config/defaults');
 
 // Constants.
@@ -22,11 +23,20 @@ var acquireFailures = 0;
 // Functions.
 
 function log (message) {
-  console.log(moment().format('HH:mm:ss') + ': ' + message);
+  console.log(moment().format('[[]HH:mm:ss[] ]').white, message.green);
+}
+
+function logEmphasis (message) {
+  console.log(moment().format('[[]HH:mm:ss[] ]').white, message.magenta);
+}
+
+function logWarning (message) {
+  message = 'Warn: ' + message;
+  console.log(moment().format('[[]HH:mm:ss[] ]').white, message.yellow);
 }
 
 function logError (err) {
-  console.error(moment().format('HH:mm:ss') + ': ' + err);
+  console.error(moment().format('[[]HH:mm:ss[] ]').white, err.red);
 }
 
 function panic () {
@@ -85,7 +95,7 @@ function acquireIP () {
       moment().diff(lastAcquisition) < config.acquireIPDelayMs)
     return;
 
-  log('Too many heartbeats missed, checking floating IP assignment...');
+  logWarning('Too many heartbeats missed, checking floating IP assignment...');
 
   lastAcquisition = moment();
 
@@ -117,7 +127,7 @@ function acquireIP () {
 
       lastHeartbeat = moment();
       acquireFailures = 0;
-      return log('Successfully acquired floating IP');
+      return logEmphasis('Successfully acquired floating IP');
 
     }, function (err) {
 
@@ -145,8 +155,9 @@ function heartbeatSuccess () {
 
 function heartbeatFailure (reason) {
 
-  log('WARN: No heartbeat response received from peer (' +
-      config.peerIPAddress + '): ' + reason);
+  logWarning('No heartbeat response received from peer (' +
+      config.peerIPAddress + ')');
+  logWarning(reason);
 
   if (moment().diff(lastHeartbeat) >= config.acquireIPAfterMs)
     return acquireIP();
@@ -230,8 +241,18 @@ function doHeartbeat () {
     var deferred = Q.defer();
 
     http.createServer(function (req, res) {
-      res.end('OK');
-      log('Responded to heartbeat request from peer (' + req.ip + ')');
+
+      var ip = '(' + req.connection.remoteAddress + ')';
+
+      if (req.connection.remoteAddress === config.peerIPAddress) {
+        res.end('OK');
+        return log('Responded to heartbeat request from peer ' + ip);
+      } else {
+        res.statusCode = 403;
+        res.end('Forbidden');
+        return logWarning('Rejected heartbeat request from unknown peer ' + ip);
+      }
+
     }).listen(config.bindPort, config.bindIPAddress, function (err) {
 
       if (!err)

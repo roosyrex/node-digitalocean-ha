@@ -23,5 +23,9 @@ module.exports = {
   acquireIPAfterMs        : 120000,
   // Interval between floating IP acquisition attempts (milliseconds).
   acquireIPDelayMs        : 60000,
+  // (CONFIDENTIAL) Pushover application API token.
+  pushoverToken           : '',
+  // (CONFIDENTIAL) Pushover user or group key.
+  pushoverUserGroupKey    : ''
 
 };

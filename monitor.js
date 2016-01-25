@@ -1,6 +1,7 @@
 // Dependencies.
 
 var http    = require('http');
+var os      = require('os');
 var Q       = require('q');
 var _       = require('lodash');
 var request = require('request');
@@ -10,6 +11,8 @@ var config  = require('./config/defaults');
 
 // Constants.
 
+var HOSTNAME        = '(' + os.hostname() + ')';
+var PUSHOVER_URL    = 'https://api.pushover.net/1/messages.json';
 var DROPLET_ID_URL  = 'http://169.254.169.254/metadata/v1/id';
 var FIP_ACTIVE_URL  = 'http://169.254.169.254/metadata/v1/floating_ip/ipv4/active';
 var FIP_ACQUIRE_URL = 'https://api.digitalocean.com/v2/floating_ips/$floatingIPAddress/actions';
@@ -31,16 +34,12 @@ function logEmphasis (message) {
 }
 
 function logWarning (message) {
-  message = 'Warn: ' + message;
+  message = 'Warning: ' + message;
   console.log(moment().format('[[]HH:mm:ss[] ]').white, message.yellow);
 }
 
 function logError (err) {
   console.error(moment().format('[[]HH:mm:ss[] ]').white, err.toString().red);
-}
-
-function panic () {
-  logError('PANIC!');
 }
 
 function makeRequest (method, url, headers, body, code) {
@@ -87,6 +86,59 @@ function makeRequest (method, url, headers, body, code) {
 
 }
 
+function sendPushoverAlert(options, retries) {
+
+  if (typeof retries !== 'number')
+    retries = 5;
+
+  options = _.assign(options, {
+    token : config.pushoverToken,
+    user  : config.pushoverUserGroupKey
+  });
+
+  makeRequest('post', PUSHOVER_URL, options)
+  .then(function () {
+    logEmphasis('Successfully sent pushover notification');
+  })
+  .catch(function (err) {
+
+    logWarning('Failed to send pushover notification');
+
+    if (err instanceof Error)
+      logError(err);
+    else
+      logWarning(err);
+
+    if (retries !== 0) {
+      logEmphasis('Re-attempting to send pushover notification in 30s...');
+      setTimeout(sendPushoverAlert, 30000, options, retries - 1);
+    } else {
+      logError('Ran out of attempts to send pushover notification');
+    }
+
+  });
+
+}
+
+function panicAlert () {
+  logEmphasis('Sending pushover alert for panic event');
+  sendPushoverAlert({
+    title    : 'Load balancer alert ' + HOSTNAME,
+    message  : 'FATAL: Unable to acquire floating IP address from peer',
+    priority : 2,
+    retry    : 180,
+    expire   : 3600
+  });
+}
+
+function acquireAlert () {
+  logEmphasis('Sending pushover alert for acquisition event');
+  sendPushoverAlert({
+    title   : 'Load balancer alert ' + HOSTNAME,
+    message : 'Failover event - acquired floating IP address from peer'
+  });
+}
+
 function acquireIP () {
 
   // Only attempt to acquire the floating IP if we haven't recently.
@@ -95,7 +147,7 @@ function acquireIP () {
       moment().diff(lastAcquisition) < config.acquireIPDelayMs)
     return;
 
-  logWarning('Too many heartbeats missed, checking floating IP assignment...');
+  logEmphasis('Too many heartbeats missed, checking floating IP assignment...');
 
   lastAcquisition = moment();
 
@@ -112,7 +164,7 @@ function acquireIP () {
 
     // Attempt to acquire the floating IP.
 
-    log('Attempting to acquire floating IP...');
+    logEmphasis('Attempting to acquire floating IP...');
 
     var url     =
         FIP_ACQUIRE_URL.replace('$floatingIPAddress', config.floatingIPAddress);
@@ -127,17 +179,22 @@ function acquireIP () {
 
       lastHeartbeat = moment();
       acquireFailures = 0;
-      return logEmphasis('Successfully acquired floating IP');
+      logEmphasis('Successfully acquired floating IP');
+      return acquireAlert();
 
     }, function (err) {
 
       acquireFailures++;
-      logError('Failed to acquire floating IP: ' + err);
 
-      if (acquireFailures >= 3) {
-        panic();
-        return process.exit();
-      }
+      logError('Failed to acquire floating IP');
+
+      if (err instanceof Error)
+        logError(err);
+      else
+        logWarning(err);
+
+      if (acquireFailures === 3)
+        panicAlert();
 
     });
   
@@ -214,6 +271,10 @@ function doHeartbeat () {
       message = 'Missing floatingIPAddress';
     else if (!config.apiToken)
       message = 'Missing apiToken';
+    else if (!config.pushoverToken)
+      message = 'Missing pushoverToken';
+    else if (!config.pushoverUserGroupKey)
+      message = 'Missing pushoverUserGroupKey';
 
     if (message) {
       logError(message + ' parameter in configuration, exiting...');

@@ -42,22 +42,17 @@ function logError (err) {
   console.error(moment().format('[[]HH:mm:ss[] ]').white, err.toString().red);
 }
 
-function makeRequest (method, url, headers, body, code) {
+function makeRequest (method, url, options, code) {
 
   code = code || 200;
 
   var deferred = Q.defer();
   var timeout  = false;
 
-  var options = {
+  options = _.assign(options, {
     url: url,
     followRedirect: false
-  };
-
-  if (headers)
-    options.headers = headers;
-  if (body)
-    options.body = body;
+  });
 
   // Set timeout for request.
 
@@ -96,7 +91,7 @@ function sendPushoverAlert(options, retries) {
     user  : config.pushoverUserGroupKey
   });
 
-  makeRequest('post', PUSHOVER_URL, options)
+  makeRequest('post', PUSHOVER_URL, { form: options })
   .then(function () {
     logEmphasis('Successfully sent pushover notification');
   })
@@ -174,7 +169,12 @@ function acquireIP () {
       'Content-Type'  : 'application/json'
     };
 
-    makeRequest('post', url, headers, JSON.stringify(data), 201)
+    var options = {
+      headers : headers,
+      body    : JSON.stringify(data)
+    };
+
+    makeRequest('post', url, options, 201)
     .then(function () {
 
       lastHeartbeat = moment();

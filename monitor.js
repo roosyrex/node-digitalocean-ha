@@ -36,7 +36,7 @@ function logWarning (message) {
 }
 
 function logError (err) {
-  console.error(moment().format('[[]HH:mm:ss[] ]').white, err.red);
+  console.error(moment().format('[[]HH:mm:ss[] ]').white, err.toString().red);
 }
 
 function panic () {
@@ -79,7 +79,7 @@ function makeRequest (method, url, headers, body, code) {
     if (!err && res.statusCode === code)
       return deferred.resolve(body);
     else
-      return deferred.reject(err || 'Invalid status code: ' + res.statusCode);
+      return deferred.reject(err || ('Invalid status code: ' + res.statusCode));
 
   });
 

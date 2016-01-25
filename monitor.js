@@ -130,7 +130,10 @@ function acquireAlert () {
   logEmphasis('Sending pushover alert for acquisition event');
   sendPushoverAlert({
     title   : 'Load balancer alert ' + HOSTNAME,
-    message : 'Failover event - acquired floating IP address from peer'
+    message : 'Failover event - acquired floating IP address from peer',
+    priority : 2,
+    retry    : 180,
+    expire   : 3600
   });
 }
 

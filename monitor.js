@@ -7,21 +7,16 @@ var moment  = require('moment');
 
 // Constants.
 
-var REQUEST_TIMEOUT_MS     = 15000;
-var HEARTBEAT_INTERVAL_MS  = 20000;
-var ACQUIRE_AFTER_MS       = 60000;
-var ACQUIRE_DELAY_MS       = 60000;
-
+var DROPLET_ID_URL  = 'http://169.254.169.254/metadata/v1/id';
 var FIP_ACTIVE_URL  = 'http://169.254.169.254/metadata/v1/floating_ip/ipv4/active';
-var FIP_ACQUIRE_URL = 'https://api.digitalocean.com/v2/floating_ips/$floatingIP/actions';
+var FIP_ACQUIRE_URL = 'https://api.digitalocean.com/v2/floating_ips/$floatingIPAddress/actions';
 
 // Variables.
 
-var config;
-var server;
+var config = null;
 
-var lastHeartbeat   = moment();
-var lastAcquisition = moment();
+var lastHeartbeat   = null;
+var lastAcquisition = null;
 var acquireFailures = 0;
 
 // Functions.
@@ -30,8 +25,12 @@ function log (message) {
   console.log(moment().format('HH:mm:ss') + ': ' + message);
 }
 
+function logError (err) {
+  console.error(moment().format('HH:mm:ss') + ': ' + err);
+}
+
 function panic () {
-  log('PANIC!');
+  logError('PANIC!');
 }
 
 function makeRequest (method, url, headers, body, code) {
@@ -56,7 +55,7 @@ function makeRequest (method, url, headers, body, code) {
   setTimeout(function () {
     timeout = true;
     return deferred.reject(500);
-  }, REQUEST_TIMEOUT_MS);
+  }, config.httpRequestTimeoutMs);
 
   request[method](options, function (err, res, body) {
 
@@ -82,10 +81,11 @@ function acquireIP () {
 
   // Only attempt to acquire the floating IP if we haven't recently.
 
-  if (moment().diff(lastAcquisition) < ACQUIRE_DELAY_MS)
+  if (lastAcquisition &&
+      moment().diff(lastAcquisition) < config.acquireIPDelayMs)
     return;
 
-  log('Too many heartbeats missed, acquiring IP...');
+  log('Too many heartbeats missed, checking floating IP assignment...');
 
   lastAcquisition = moment();
 
@@ -97,12 +97,15 @@ function acquireIP () {
     if (body === 'true') {
       lastHeartbeat = moment();
       acquireFailures = 0;
-      return log('IP is already assigned to us');
+      return log('Floating IP is already assigned to us, no action required');
     }
 
     // Attempt to acquire the floating IP.
 
-    var url     = FIP_ACQUIRE_URL.replace('$floatingIP', config.floatingIP);
+    log('Attempting to acquire floating IP...');
+
+    var url     =
+        FIP_ACQUIRE_URL.replace('$floatingIPAddress', config.floatingIPAddress);
     var data    = { type: 'assign', droplet_id: config.dropletId };
     var headers = {
       'Authorization' : 'Bearer ' + config.apiToken,
@@ -114,12 +117,12 @@ function acquireIP () {
 
       lastHeartbeat = moment();
       acquireFailures = 0;
-      return log('Successfully acquired IP');
+      return log('Successfully acquired floating IP');
 
     }, function (err) {
 
       acquireFailures++;
-      log('Failed to acquire IP: ' + err);
+      logError('Failed to acquire floating IP: ' + err);
 
       if (acquireFailures >= 3) {
         panic();
@@ -136,51 +139,130 @@ function heartbeatSuccess () {
 
   lastHeartbeat = moment();
 
-  log('Heartbeat OK');
+  log('Received heartbeat response from peer (' + config.peerIPAddress + ')');
 
 }
 
 function heartbeatFailure (reason) {
 
-  log('Heartbeat failed: ' + reason);
+  log('WARN: No heartbeat response received from peer (' +
+      config.peerIPAddress + '): ' + reason);
 
-  if (moment().diff(lastHeartbeat) >= ACQUIRE_AFTER_MS)
+  if (moment().diff(lastHeartbeat) >= config.acquireIPAfterMs)
     return acquireIP();
 
 }
 
 function doHeartbeat () {
 
+  // Ensure last heartbeat date is initialised.
+
+  lastHeartbeat = lastHeartbeat || moment();
+
   // Set timeout for next heartbeat.
 
-  setTimeout(doHeartbeat, HEARTBEAT_INTERVAL_MS);
+  setTimeout(doHeartbeat, config.heartbeatIntervalMs);
 
   // Make heartbeat request.
 
-  var promise = makeRequest('get', 'http://' + config.peerAddress + ':' + config.bindPort)
+  var promise = makeRequest(
+      'get', 'http://' + config.peerIPAddress + ':' + config.bindPort)
   .then(heartbeatSuccess, heartbeatFailure);
 
 }
 
 // Setup.
 
-try {
-  config = require('./config/config.js');
-} catch (err) {
-  console.error('Unable to read config.js file! Exiting...');
-  process.exit();
-}
+(function () {
 
-// Start the heartbeat server.
+  // Load configuration and run setup activities.
 
-server = http.createServer(function (req, res) {
-  return res.end('OK');
-});
+  Q().then(function () {
+    config = require('./config/config.js');
+  })
+  .catch(function (err) {
+    logError(err);
+    logError('Unable to read config.js file, exiting...');
+    return process.exit();
+  })
+  .then(function () {
 
-server.listen(config.bindPort, config.bindAddress);
+    // Check the config is valid.
 
-// Start heartbeat requests.
+    var message = null;
 
-doHeartbeat();
+    if (!config.bindIPAddress)
+      message = 'Missing bindIPAddress';
+    else if (!config.peerIPAddress)
+      message = 'Missing peerIPAddress';
+    else if (!config.floatingIPAddress)
+      message = 'Missing floatingIPAddress';
+    else if (!config.apiToken)
+      message = 'Missing apiToken';
 
-console.log('Heartbeat server started OK');
+    if (message) {
+      logError(message + ' parameter in configuration, exiting...');
+      return process.exit();
+    }
+
+  })
+  .then(function () {
+
+    // Get droplet id.
+
+    return makeRequest('get', DROPLET_ID_URL)
+    .catch(function (err) {
+      logError(err);
+      logError('Failed to get droplet id, exiting...');
+      return process.exit();
+    });
+
+  })
+  .then(function (response) {
+
+    // Store droplet id.
+
+    config.dropletId = response;
+
+    // Create a new server to listen for heartbeats.
+
+    var deferred = Q.defer();
+
+    http.createServer(function (req, res) {
+      res.end('OK');
+      log('Responded to heartbeat request from peer (' + req.ip + ')');
+    }).listen(config.bindPort, config.bindIPAddress, function (err) {
+
+      if (!err)
+        return deferred.resolve();
+
+      // Problem starting server - log error and exit.
+
+      logError(err);
+      logError('Failed to start heartbeat server, exiting...');
+      return process.exit();
+
+    });
+
+    return deferred.promise;
+
+  })
+  .then(function () {
+
+    // Set timeout for initial heartbeat with delay.
+
+    var delaySeconds = config.heartbeatInitialDelayMs / 1000;
+
+    log('Heartbeat server started OK');
+    log('First heartbeat will be sent in ' + delaySeconds + 's...');
+
+    setTimeout(doHeartbeat, config.heartbeatInitialDelayMs);
+
+  })
+  .catch(function (err) {
+    logError(err);
+    logError('Setup failed, exiting...');
+    return process.exit();
+  });
+
+})();
